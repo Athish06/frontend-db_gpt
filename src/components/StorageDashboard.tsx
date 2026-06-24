@@ -9,13 +9,42 @@ interface StorageStats {
   redis_keys: { count: number; size_bytes: number };
 }
 
+interface ParquetFileDetail {
+  filename: string;
+  total_rows?: number;
+  rows?: Record<string, unknown>[];
+  error?: string;
+}
+
+interface RedisKeyDetail {
+  key: string;
+  type: string;
+  value: unknown;
+}
+
+interface StorageDetailsResponse {
+  db_id: string;
+  target: string;
+  schema_cache?: Record<string, unknown>;
+  parquet_files?: ParquetFileDetail[];
+  redis_keys?: RedisKeyDetail[];
+}
+
+interface GroupedDbStat {
+  db_id: string;
+  total_bytes: number;
+  parquet_count: number;
+  redis_count: number;
+  schema_count: number;
+}
+
 import TopNav from './layout/TopNav';
 import { useDatabase } from '../contexts/DatabaseContext';
 
 export const StorageDashboard: React.FC = () => {
   const [stats, setStats] = useState<StorageStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDetails, setSelectedDetails] = useState<any>(null);
+  const [selectedDetails, setSelectedDetails] = useState<StorageDetailsResponse | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedDbView, setSelectedDbView] = useState<string | null>(null);
@@ -53,6 +82,34 @@ export const StorageDashboard: React.FC = () => {
     }
   };
 
+  const deleteStorage = async (e: React.MouseEvent, db_id: string, target?: string) => {
+    e.stopPropagation(); // Prevent opening the modal or clicking the card
+    const isEntireDB = !target;
+    const confirmMsg = isEntireDB 
+      ? `Are you sure you want to delete the ENTIRE storage for this database? This will clear the schema cache and all table caches. This action cannot be undone.`
+      : `Are you sure you want to delete the storage for target '${target}'? This action cannot be undone.`;
+      
+    if (window.confirm(confirmMsg)) {
+      setIsLoading(true);
+      try {
+        let url = `/api/storage?db_id=${db_id}`;
+        if (target) url += `&target=${target}`;
+        await api.delete(url);
+        
+        // If we deleted the entire DB and it's the currently viewed one, go back
+        if (isEntireDB && selectedDbView === db_id) {
+          setSelectedDbView(null);
+        }
+        
+        await fetchStats();
+      } catch (error) {
+        console.error("Failed to delete storage", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchStats();
     if (databases.length === 0) {
@@ -70,7 +127,7 @@ export const StorageDashboard: React.FC = () => {
 
   // Group stats by DB
   const groupedStats = React.useMemo(() => {
-    const groups: Record<string, any> = {};
+    const groups: Record<string, GroupedDbStat> = {};
     stats.forEach(stat => {
       if (!groups[stat.db_id]) {
         groups[stat.db_id] = {
@@ -156,8 +213,17 @@ export const StorageDashboard: React.FC = () => {
                   <h3 className="font-bold text-lg text-neutral-900 truncate group-hover:text-blue-600 transition-colors" title={getDbName(db.db_id)}>{getDbName(db.db_id)}</h3>
                   <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">Entire Database</p>
                 </div>
-                <div className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-semibold">
-                  {formatBytes(db.total_bytes)}
+                <div className="flex items-center gap-2">
+                  <div className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-semibold">
+                    {formatBytes(db.total_bytes)}
+                  </div>
+                  <button 
+                    onClick={(e) => deleteStorage(e, db.db_id)}
+                    title="Delete Entire DB Storage"
+                    className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                  </button>
                 </div>
               </div>
 
@@ -226,8 +292,17 @@ export const StorageDashboard: React.FC = () => {
                       {stat.target === '__all__' ? 'Entire Database' : 'Specific Table'}
                     </p>
                   </div>
-                  <div className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-full text-xs font-semibold">
-                    {formatBytes(totalBytes)}
+                  <div className="flex items-center gap-2">
+                    <div className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-full text-xs font-semibold">
+                      {formatBytes(totalBytes)}
+                    </div>
+                    <button 
+                      onClick={(e) => deleteStorage(e, stat.db_id, stat.target)}
+                      title="Delete Target Storage"
+                      className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    </button>
                   </div>
                 </div>
 
@@ -320,7 +395,7 @@ export const StorageDashboard: React.FC = () => {
                     {selectedDetails.parquet_files?.length === 0 ? (
                       <p className="text-sm text-neutral-500 italic px-5">No parquet files found.</p>
                     ) : (
-                      selectedDetails.parquet_files?.map((pq: any, i: number) => (
+                      selectedDetails.parquet_files?.map((pq: ParquetFileDetail, i: number) => (
                         <div key={i} className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
                           <div className="px-4 py-3 bg-neutral-50 border-b border-neutral-200 flex justify-between items-center">
                             <code className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded font-mono">{pq.filename}</code>
@@ -333,15 +408,15 @@ export const StorageDashboard: React.FC = () => {
                               <table className="min-w-full divide-y divide-neutral-200 text-sm">
                                 <thead className="bg-neutral-50 sticky top-0">
                                   <tr>
-                                    {Object.keys(pq.rows[0] || {}).map(k => (
+                                    {Object.keys(pq.rows?.[0] || {}).map(k => (
                                       <th key={k} className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">{k}</th>
                                     ))}
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-neutral-100">
-                                  {pq.rows.map((row: any, ri: number) => (
+                                  {pq.rows?.map((row: Record<string, unknown>, ri: number) => (
                                     <tr key={ri} className="hover:bg-blue-50/30 transition-colors">
-                                      {Object.values(row).map((val: any, vi: number) => (
+                                      {Object.values(row).map((val: unknown, vi: number) => (
                                         <td key={vi} className="px-4 py-2 text-neutral-700 max-w-xs truncate" title={String(val)}>{String(val)}</td>
                                       ))}
                                     </tr>
@@ -364,7 +439,7 @@ export const StorageDashboard: React.FC = () => {
                       <p className="text-sm text-neutral-500 italic px-5">No active jobs in Redis.</p>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
-                        {selectedDetails.redis_keys?.map((r: any, i: number) => (
+                        {selectedDetails.redis_keys?.map((r: RedisKeyDetail, i: number) => (
                           <div key={i} className="bg-neutral-900 rounded-xl overflow-hidden shadow-sm flex flex-col">
                             <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-green-500"></span>
