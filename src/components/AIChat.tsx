@@ -65,26 +65,27 @@ const MessageBubble: React.FC<{
   }
 
   return (
-    <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'} group relative`}>
-      {isLastUserMessage && (
-        <button
-          onClick={() => setIsEditing(true)}
-          className="absolute -left-10 top-2 p-1.5 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-          title="Edit Prompt"
+    <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+      <div className="relative group max-w-[85%] w-full flex flex-col items-end">
+        {isLastUserMessage && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="absolute -left-10 top-2 p-1.5 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+            title="Edit Prompt"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>
+        )}
+        <div
+          className={`w-full rounded-2xl px-5 py-3 ${
+            message.role === 'user'
+              ? 'bg-neutral-900 text-white rounded-br-sm'
+              : 'bg-neutral-100 text-neutral-900 rounded-bl-sm border border-neutral-200'
+          }`}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
-        </button>
-      )}
-      <div
-        className={`max-w-[85%] rounded-2xl px-5 py-3 ${
-          message.role === 'user'
-            ? 'bg-neutral-900 text-white rounded-br-sm'
-            : 'bg-neutral-100 text-neutral-900 rounded-bl-sm border border-neutral-200'
-        }`}
-      >
         <div className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">
           <ReactMarkdown
             components={{
@@ -199,10 +200,11 @@ const AIChat: React.FC = () => {
   };
 
   const loadHistoryList = async () => {
-    if (!selectedDatabaseId || !selectedTable) return;
+    if (!selectedDatabaseId) return;
+    const target = selectedTable || "__all__";
     setIsLoadingHistory(true);
     try {
-      const response = await api.get(`/api/conversations?db_id=${selectedDatabaseId}&target=${selectedTable}`);
+      const response = await api.get(`/api/conversations?db_id=${selectedDatabaseId}&target=${target}`);
       setHistoryList(response);
     } catch (err) {
       console.error("Failed to load history", err);
