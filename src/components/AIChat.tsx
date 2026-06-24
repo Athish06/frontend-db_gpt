@@ -145,6 +145,7 @@ const MessageBubble: React.FC<{
           </div>
         )}
       </div>
+      </div>
     </div>
   );
 };
