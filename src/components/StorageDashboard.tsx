@@ -18,6 +18,7 @@ export const StorageDashboard: React.FC = () => {
   const [selectedDetails, setSelectedDetails] = useState<any>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [selectedDbView, setSelectedDbView] = useState<string | null>(null);
   
   const databaseContext = useDatabase();
   const databases = databaseContext?.databases || [];
@@ -67,29 +68,70 @@ export const StorageDashboard: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Group stats by DB
+  const groupedStats = React.useMemo(() => {
+    const groups: Record<string, any> = {};
+    stats.forEach(stat => {
+      if (!groups[stat.db_id]) {
+        groups[stat.db_id] = {
+          db_id: stat.db_id,
+          total_bytes: 0,
+          parquet_count: 0,
+          redis_count: 0,
+          schema_count: 0,
+        };
+      }
+      groups[stat.db_id].total_bytes += stat.schema_cache.size_bytes + stat.parquet_files.size_bytes + stat.redis_keys.size_bytes;
+      groups[stat.db_id].parquet_count += stat.parquet_files.count;
+      groups[stat.db_id].redis_count += stat.redis_keys.count;
+      groups[stat.db_id].schema_count += stat.schema_cache.count;
+    });
+    return Object.values(groups);
+  }, [stats]);
+
+  const activeStats = selectedDbView ? stats.filter(s => s.db_id === selectedDbView) : [];
+
   return (
     <div className="h-screen bg-neutral-50 flex flex-col overflow-hidden relative">
       <TopNav />
       <div className="flex-1 bg-surface flex flex-col p-8 overflow-y-auto w-full h-full">
         <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Storage Usage</h1>
-          <p className="text-sm text-neutral-500 mt-1">Manage your active cache and queue storage.</p>
+          <h1 className="text-2xl font-bold text-neutral-900">
+            {selectedDbView ? getDbName(selectedDbView) : 'Storage Usage'}
+          </h1>
+          <p className="text-sm text-neutral-500 mt-1">
+            {selectedDbView ? 'Detailed storage breakdown for this database.' : 'Manage your active cache and queue storage.'}
+          </p>
         </div>
-        <button 
-          onClick={fetchStats}
-          className="p-2 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2 text-sm text-neutral-700"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 2v6h-6"></path>
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-            <path d="M3 3v5h5"></path>
-          </svg>
-          Refresh
-        </button>
+        <div className="flex gap-4">
+          {selectedDbView && (
+            <button 
+              onClick={() => setSelectedDbView(null)}
+              className="p-2 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2 text-sm text-neutral-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              Back to Storage
+            </button>
+          )}
+          <button 
+            onClick={fetchStats}
+            className="p-2 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors flex items-center gap-2 text-sm text-neutral-700 group"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isLoading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}>
+              <path d="M21 2v6h-6"></path>
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {isLoading ? (
+      {isLoading && stats.length === 0 ? (
         <div className="flex justify-center py-12">
           <div className="w-6 h-6 border-2 border-neutral-900 border-t-transparent rounded-full animate-spin"></div>
         </div>
@@ -100,23 +142,91 @@ export const StorageDashboard: React.FC = () => {
           </svg>
           No active storage found.
         </div>
+      ) : !selectedDbView ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {groupedStats.map((db, idx) => (
+            <div 
+              key={idx} 
+              onClick={() => setSelectedDbView(db.db_id)}
+              className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer hover:border-neutral-400 group relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300"></div>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-bold text-lg text-neutral-900 truncate group-hover:text-blue-600 transition-colors" title={getDbName(db.db_id)}>{getDbName(db.db_id)}</h3>
+                  <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">Entire Database</p>
+                </div>
+                <div className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-semibold">
+                  {formatBytes(db.total_bytes)}
+                </div>
+              </div>
+
+              <div className="space-y-4 mt-6">
+                <div className="flex justify-between items-center text-sm border-b border-neutral-100 pb-3">
+                  <div className="flex items-center gap-2 text-neutral-600">
+                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                    DuckDB Cache
+                  </div>
+                  <div className="font-medium">
+                    {db.parquet_count > 0 ? (
+                      <span>{db.parquet_count} active files</span>
+                    ) : (
+                      <span className="text-neutral-400">Empty</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-sm border-b border-neutral-100 pb-3">
+                  <div className="flex items-center gap-2 text-neutral-600">
+                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                    Redis Queue
+                  </div>
+                  <div className="font-medium">
+                    {db.redis_count > 0 ? (
+                      <span>{db.redis_count} active tasks</span>
+                    ) : (
+                      <span className="text-neutral-400">Empty</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2 text-neutral-600">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    MongoDB Schema
+                  </div>
+                  <div className="font-medium">
+                    {db.schema_count > 0 ? (
+                      <span>Cached</span>
+                    ) : (
+                      <span className="text-neutral-400">Not Cached</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stats.map((stat, idx) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-right-8 duration-300">
+          {activeStats.map((stat, idx) => {
             const totalBytes = stat.schema_cache.size_bytes + stat.parquet_files.size_bytes + stat.redis_keys.size_bytes;
-            
             return (
               <div 
                 key={idx} 
                 onClick={() => fetchDetails(stat.db_id, stat.target)}
-                className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-neutral-400 group"
+                className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-blue-400 group"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="font-semibold text-neutral-900 truncate group-hover:text-blue-600 transition-colors" title={getDbName(stat.db_id)}>{getDbName(stat.db_id)}</h3>
-                    <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">{stat.target === '__all__' ? 'Global Database' : stat.target}</p>
+                    <h3 className="font-semibold text-neutral-900 truncate group-hover:text-blue-600 transition-colors">
+                      {stat.target === '__all__' ? 'Global Context' : stat.target}
+                    </h3>
+                    <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">
+                      {stat.target === '__all__' ? 'Entire Database' : 'Specific Table'}
+                    </p>
                   </div>
-                  <div className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-semibold">
+                  <div className="bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1 rounded-full text-xs font-semibold">
                     {formatBytes(totalBytes)}
                   </div>
                 </div>
