@@ -34,19 +34,21 @@ const TopNav: React.FC = () => {
             {user?.email}
           </div>
           
-          <a
-            href="/storage"
-            className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
-          >
-            Storage
-          </a>
-          
-          <a
-            href="/"
-            className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
-          >
-            Dashboard
-          </a>
+          {window.location.pathname === '/' ? (
+            <a
+              href="/storage"
+              className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
+            >
+              Storage
+            </a>
+          ) : (
+            <a
+              href="/"
+              className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
+            >
+              Dashboard
+            </a>
+          )}
 
           <button
             onClick={() => setShowSettings(true)}

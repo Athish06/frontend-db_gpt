@@ -10,10 +10,22 @@ interface StorageStats {
 }
 
 import TopNav from './layout/TopNav';
+import { useDatabase } from '../contexts/DatabaseContext';
 
 export const StorageDashboard: React.FC = () => {
   const [stats, setStats] = useState<StorageStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedDetails, setSelectedDetails] = useState<any>(null);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  
+  const databaseContext = useDatabase();
+  const databases = databaseContext?.databases || [];
+
+  const getDbName = (dbId: string) => {
+    const db = databases.find(d => d.db_id === dbId);
+    return db ? db.database_name || db.display_name : `DB: ${dbId.slice(0, 8)}...`;
+  };
 
   const fetchStats = async () => {
     setIsLoading(true);
@@ -26,10 +38,26 @@ export const StorageDashboard: React.FC = () => {
       setIsLoading(false);
     }
   };
+  
+  const fetchDetails = async (db_id: string, target: string) => {
+    setIsDetailsLoading(true);
+    setShowModal(true);
+    try {
+      const response = await api.get(`/api/storage/details?db_id=${db_id}&target=${target}`);
+      setSelectedDetails({ ...response, db_id, target });
+    } catch (error) {
+      console.error("Failed to fetch storage details", error);
+    } finally {
+      setIsDetailsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchStats();
-  }, []);
+    if (databases.length === 0) {
+      databaseContext?.fetchDatabases();
+    }
+  }, [databases.length, databaseContext]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -40,7 +68,7 @@ export const StorageDashboard: React.FC = () => {
   };
 
   return (
-    <div className="h-screen bg-neutral-50 flex flex-col overflow-hidden">
+    <div className="h-screen bg-neutral-50 flex flex-col overflow-hidden relative">
       <TopNav />
       <div className="flex-1 bg-surface flex flex-col p-8 overflow-y-auto w-full h-full">
         <div className="flex justify-between items-center mb-8">
@@ -78,10 +106,14 @@ export const StorageDashboard: React.FC = () => {
             const totalBytes = stat.schema_cache.size_bytes + stat.parquet_files.size_bytes + stat.redis_keys.size_bytes;
             
             return (
-              <div key={idx} className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+              <div 
+                key={idx} 
+                onClick={() => fetchDetails(stat.db_id, stat.target)}
+                className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-neutral-400 group"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="font-semibold text-neutral-900 truncate" title={stat.db_id}>DB: {stat.db_id.slice(0, 8)}...</h3>
+                    <h3 className="font-semibold text-neutral-900 truncate group-hover:text-blue-600 transition-colors" title={getDbName(stat.db_id)}>{getDbName(stat.db_id)}</h3>
                     <p className="text-xs text-neutral-500 uppercase tracking-wider mt-1">{stat.target === '__all__' ? 'Global Database' : stat.target}</p>
                   </div>
                   <div className="bg-neutral-100 text-neutral-700 px-3 py-1 rounded-full text-xs font-semibold">
@@ -138,6 +170,131 @@ export const StorageDashboard: React.FC = () => {
         </div>
       )}
       </div>
+
+      {/* Details Modal */}
+      {showModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
+          <div className="absolute inset-0 bg-neutral-900/60 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+          <div className="relative w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center justify-between p-6 border-b border-neutral-200 bg-neutral-50/50">
+              <div>
+                <h2 className="text-xl font-bold text-neutral-900">
+                  {selectedDetails ? getDbName(selectedDetails.db_id) : 'Loading...'}
+                </h2>
+                <p className="text-sm text-neutral-500 mt-1 uppercase tracking-wider">
+                  Target: {selectedDetails?.target === '__all__' ? 'Global Database' : selectedDetails?.target}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowModal(false)}
+                className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-200/50 rounded-full transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-neutral-50/30 space-y-8">
+              {isDetailsLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 text-neutral-500">
+                  <div className="w-8 h-8 border-4 border-neutral-900 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  Reading cache and queues...
+                </div>
+              ) : selectedDetails ? (
+                <>
+                  {/* DuckDB Parquet Previews */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div> DuckDB Parquet Previews
+                    </h3>
+                    {selectedDetails.parquet_files?.length === 0 ? (
+                      <p className="text-sm text-neutral-500 italic px-5">No parquet files found.</p>
+                    ) : (
+                      selectedDetails.parquet_files?.map((pq: any, i: number) => (
+                        <div key={i} className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                          <div className="px-4 py-3 bg-neutral-50 border-b border-neutral-200 flex justify-between items-center">
+                            <code className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded font-mono">{pq.filename}</code>
+                            <span className="text-xs font-medium text-neutral-500 px-2 py-1 bg-neutral-200 rounded-full">Total Rows: {pq.total_rows} (Showing first 50)</span>
+                          </div>
+                          <div className="overflow-x-auto max-h-64">
+                            {pq.error ? (
+                              <div className="p-4 text-red-500 text-sm">{pq.error}</div>
+                            ) : (
+                              <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                                <thead className="bg-neutral-50 sticky top-0">
+                                  <tr>
+                                    {Object.keys(pq.rows[0] || {}).map(k => (
+                                      <th key={k} className="px-4 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">{k}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-neutral-100">
+                                  {pq.rows.map((row: any, ri: number) => (
+                                    <tr key={ri} className="hover:bg-blue-50/30 transition-colors">
+                                      {Object.values(row).map((val: any, vi: number) => (
+                                        <td key={vi} className="px-4 py-2 text-neutral-700 max-w-xs truncate" title={String(val)}>{String(val)}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Redis Queue Status */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div> Redis Active Job Queues
+                    </h3>
+                    {selectedDetails.redis_keys?.length === 0 ? (
+                      <p className="text-sm text-neutral-500 italic px-5">No active jobs in Redis.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4">
+                        {selectedDetails.redis_keys?.map((r: any, i: number) => (
+                          <div key={i} className="bg-neutral-900 rounded-xl overflow-hidden shadow-sm flex flex-col">
+                            <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              <code className="text-xs text-neutral-400 font-mono">{r.key}</code>
+                            </div>
+                            <div className="p-4 overflow-x-auto max-h-64">
+                              <pre className="text-xs text-green-400 font-mono">
+                                {JSON.stringify(r.value, null, 2)}
+                              </pre>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* MongoDB Schema Cache */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div> MongoDB Schema Cache Payload
+                    </h3>
+                    {!selectedDetails.schema_cache ? (
+                      <p className="text-sm text-neutral-500 italic px-5">Schema not cached.</p>
+                    ) : (
+                      <div className="bg-[#1e1e1e] rounded-xl overflow-hidden shadow-sm">
+                        <div className="p-4 overflow-x-auto max-h-96">
+                          <pre className="text-xs text-blue-300 font-mono">
+                            {JSON.stringify(selectedDetails.schema_cache, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            
+          </div>
+        </div>
+      )}
     </div>
   );
 };
