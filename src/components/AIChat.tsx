@@ -115,14 +115,14 @@ const AIChat: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
-    if (selectedTable) {
+    if (selectedTable || selectedDatabaseId) {
       startNewChat();
     } else {
       setMessages([]);
       setCurrentConversationId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTable]);
+  }, [selectedTable, selectedDatabaseId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -135,6 +135,14 @@ const AIChat: React.FC = () => {
         {
           role: 'assistant',
           content: `Hello. I am connected to '${selectedTable}'. How can I help you analyze this data?`,
+          timestamp: new Date(),
+        },
+      ]);
+    } else if (selectedDatabaseId) {
+      setMessages([
+        {
+          role: 'assistant',
+          content: `Hello. I am connected to the entire database. I can analyze and join data across all tables. How can I help you?`,
           timestamp: new Date(),
         },
       ]);
@@ -349,13 +357,13 @@ const AIChat: React.FC = () => {
         <div>
           <h3 className="font-semibold text-neutral-900 text-lg">AI Assistant</h3>
           <p className="text-sm text-neutral-500 mt-1">
-            {selectedTable ? `Querying target: ${selectedTable}` : 'Select a target to begin'}
+            {selectedTable ? `Querying target: ${selectedTable}` : selectedDatabaseId ? `Querying entire database` : 'Select a target to begin'}
           </p>
         </div>
         
         {/* Actions */}
         <div className="flex items-center space-x-2">
-          {selectedTable && (
+          {(selectedTable || selectedDatabaseId) && (
             <button
               onClick={startNewChat}
               className="p-2 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
@@ -446,9 +454,9 @@ const AIChat: React.FC = () => {
 
       {/* Main Chat Area */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6 flex flex-col">
-        {messages.length === 0 && !selectedTable ? (
+        {messages.length === 0 && !selectedDatabaseId ? (
           <div className="flex-1 flex items-center justify-center text-neutral-400">
-            <p className="text-sm">Select a target from the sidebar.</p>
+            <p className="text-sm">Select a database or table from the sidebar.</p>
           </div>
         ) : (
           messages.map((message, index) => (
@@ -479,12 +487,12 @@ const AIChat: React.FC = () => {
             type="text"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            disabled={!selectedTable || isLoading || isPausedState}
+            disabled={!selectedDatabaseId || isLoading || isPausedState}
             placeholder={
               isPausedState 
                 ? "Analysis paused. Update API key and click Continue above."
-                : (!selectedTable 
-                  ? "Select a target database and table to start querying" 
+                : (!selectedDatabaseId 
+                  ? "Select a database from the sidebar to begin" 
                   : "Ask a question about your data..."
                 )
             }
@@ -492,7 +500,7 @@ const AIChat: React.FC = () => {
           />
           <button
             type="submit"
-            disabled={isLoading || !question.trim() || !selectedTable || isPausedState}
+            disabled={isLoading || !question.trim() || !selectedDatabaseId || isPausedState}
             className="absolute right-2 top-2 bottom-2 px-4 bg-neutral-900 text-white text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Send
