@@ -118,15 +118,30 @@ const TableViewer: React.FC = () => {
   const currentDb = databases.find(db => db.db_id === selectedDatabaseId);
   const isMongo = currentDb?.type === 'mongodb';
   const [isLoading, setIsLoading] = useState(false);
+  const [dbSummary, setDbSummary] = useState<any[] | null>(null);
 
   useEffect(() => {
     if (selectedTable && selectedDatabaseId) {
       loadTableData();
+    } else if (!selectedTable && selectedDatabaseId) {
+      loadDbSummary();
     } else {
       if (setTableData) setTableData(null);
+      setDbSummary(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTable, selectedDatabaseId]);
+
+  const loadDbSummary = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.post('/db_summary', { db_id: selectedDatabaseId });
+      setDbSummary(response.summary || []);
+    } catch {
+      setDbSummary(null);
+    }
+    setIsLoading(false);
+  };
 
   const loadTableData = async () => {
     if (!selectedTable || !selectedDatabaseId) return;
@@ -151,10 +166,60 @@ const TableViewer: React.FC = () => {
   };
 
   if (!selectedTable) {
+    if (!selectedDatabaseId) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center text-neutral-400 h-full">
+          <div className="text-lg font-medium text-neutral-600">No Database Selected</div>
+          <p className="text-sm mt-1">Select a database from the sidebar to begin.</p>
+        </div>
+      );
+    }
+
+    if (isLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center h-full">
+          <span className="text-neutral-500 font-medium">Loading database summary...</span>
+        </div>
+      );
+    }
+
+    if (!dbSummary) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-neutral-400 h-full">
+          <p>Failed to load database summary</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-neutral-400 h-full">
-        <div className="text-lg font-medium text-neutral-600">No Table Selected</div>
-        <p className="text-sm mt-1">Select a table or collection from the sidebar to view its contents.</p>
+      <div className="flex-1 flex flex-col h-full overflow-hidden p-8 space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-surface-border flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-2xl font-semibold text-neutral-900 truncate">Database Overview</h2>
+            <p className="text-sm text-neutral-500 mt-1">{dbSummary.length} {isMongo ? 'collections' : 'tables'} available</p>
+          </div>
+        </div>
+        <div className="card flex-1 overflow-auto w-full relative p-6 bg-surface border-0 shadow-none">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {dbSummary.map((t, idx) => (
+              <div key={idx} className="bg-white border border-surface-border rounded-xl p-5 shadow-sm hover:shadow transition-shadow">
+                <div className="flex justify-between items-start mb-3 border-b border-neutral-100 pb-2">
+                  <h3 className="font-semibold text-neutral-900 truncate" title={t.table_name}>{t.table_name}</h3>
+                </div>
+                <div className="flex space-x-8 text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-neutral-400 font-medium mb-1 uppercase tracking-wider text-[10px]">Columns</span>
+                    <span className="text-neutral-700 font-semibold">{t.columns_count}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-neutral-400 font-medium mb-1 uppercase tracking-wider text-[10px]">Rows</span>
+                    <span className="text-neutral-700 font-semibold">{t.row_count}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

@@ -219,7 +219,7 @@ const AIChat: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim() || !selectedTable || !selectedDatabaseId) return;
+    if (!question.trim() || !selectedDatabaseId) return;
 
     const currentUserMessage: ChatMessage = {
       role: 'user',
@@ -234,7 +234,7 @@ const AIChat: React.FC = () => {
     try {
       const payload: { db_id: string; target: string; message: string; conversation_id?: string } = {
         db_id: selectedDatabaseId,
-        target: selectedTable,
+        target: selectedTable || "__all__",
         message: currentUserMessage.content
       };
       if (currentConversationId) {
