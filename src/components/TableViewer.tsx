@@ -147,13 +147,13 @@ const TableViewer: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 p-8 space-y-6 overflow-y-auto min-h-0">
+    <div className="flex-1 p-8 space-y-6 overflow-y-auto min-h-0 min-w-0">
       <div className="flex items-center justify-between pb-4 border-b border-surface-border">
-        <div>
-          <h2 className="text-2xl font-semibold text-neutral-900">{selectedTable}</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-semibold text-neutral-900 truncate">{selectedTable}</h2>
           <p className="text-sm text-neutral-500 mt-1">Showing up to 100 rows</p>
         </div>
-        <div className="text-sm font-medium text-neutral-600 bg-neutral-100 px-3 py-1 rounded-full">
+        <div className="text-sm font-medium text-neutral-600 bg-neutral-100 px-3 py-1 rounded-full flex-shrink-0 ml-4">
           {tableData.rows.length} rows
         </div>
       </div>
